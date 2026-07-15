@@ -11,21 +11,26 @@ http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/htt
 		http://www.mulesoft.org/schema/mule/http
 		http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
 
-	<global-property
-		doc:name="Environment"
-		name="env"
+	<global-property doc:name="Environment" name="env"
 		value="local" />
 
 	<configuration-properties
-		doc:name="Configuration properties"
-		file="config-${env}.yaml" />
+		doc:name="Configuration properties" file="config-${env}.yaml" />
 
 	<http:listener-config
 		name="cham-orders-integration-api-httpListenerConfig"
 		doc:name="HTTP Listener configuration">
-		<http:listener-connection
-			host="${http.host}"
+		<http:listener-connection host="${http.host}"
 			port="${http.port}" />
 	</http:listener-config>
+	<http:request-config
+		name="cham-orders-http-request-config"
+		basePath="${chamOrders.basePath}"
+		responseTimeout="${chamOrders.responseTimeoutMillis}"
+		sendCorrelationId="ALWAYS">
+		<http:request-connection
+			protocol="${chamOrders.protocol}" host="${chamOrders.host}"
+			port="${chamOrders.port}" />
+	</http:request-config>
 
 </mule>

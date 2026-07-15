@@ -9,7 +9,6 @@ chamOrders:
   host: "localhost"
   port: "8080"
   basePath: "/api/v1"
-  connectionTimeoutMillis: "5000"
   responseTimeoutMillis: "30000"
 
 output:
