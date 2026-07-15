@@ -16,12 +16,12 @@
 			path="${http.basePath}/*">
 			<http:response
 				statusCode="#[vars.httpStatus default 200]">
-				<http:headers>#[vars.outboundHeaders default {}]</http:headers>
+				<http:headers>#[ (vars.outboundHeaders default {}) ++ { "X-Correlation-ID": correlationId } ]</http:headers>
 			</http:response>
 			<http:error-response
 				statusCode="#[vars.httpStatus default 500]">
 				<http:body>#[payload]</http:body>
-				<http:headers>#[vars.outboundHeaders default {}]</http:headers>
+				<http:headers>#[ (vars.outboundHeaders default {}) ++ { "X-Correlation-ID": correlationId } ]</http:headers>
 			</http:error-response>
 		</http:listener>
 		<apikit:router
@@ -158,7 +158,7 @@ output application/json
 output application/json
 ---
 {
-  correlationId: "cham-integration-123",
+  correlationId: correlationId,
   status: "COMPLETED",
   ordersRead: 3,
   ordersExported: 3,
