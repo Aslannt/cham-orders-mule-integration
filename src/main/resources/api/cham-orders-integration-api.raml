@@ -1,0 +1,149 @@
+#%RAML 1.0
+title: Cham Orders Integration API
+description: Manual synchronization of confirmed orders from Cham Orders API into a canonical downstream file.
+version: v1
+baseUri: http://localhost:8081/api/v1
+mediaType: application/json
+protocols:
+  - HTTP
+
+types:
+  OrderSyncRequest:
+    type: object
+    additionalProperties: false
+    properties:
+      status:
+        type: string
+        enum:
+          - CONFIRMED
+      pageSize?:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    example:
+      status: CONFIRMED
+      pageSize: 20
+
+  OrderSyncResponse:
+    type: object
+    additionalProperties: false
+    properties:
+      correlationId: string
+      status:
+        type: string
+        enum:
+          - COMPLETED
+      ordersRead:
+        type: integer
+        minimum: 0
+      ordersExported:
+        type: integer
+        minimum: 0
+      outputFile: string
+    example:
+      correlationId: cham-integration-123
+      status: COMPLETED
+      ordersRead: 3
+      ordersExported: 3
+      outputFile: confirmed-orders-20260715-013000.json
+
+  IntegrationError:
+    type: object
+    additionalProperties: false
+    properties:
+      code: string
+      message: string
+      timestamp: datetime
+      path: string
+      correlationId: string
+      fieldErrors?:
+        type: object
+    example:
+      code: INVALID_REQUEST
+      message: The synchronization request is invalid.
+      timestamp: "2026-07-15T01:30:00-05:00"
+      path: /api/v1/order-sync
+      correlationId: cham-integration-123
+      fieldErrors: {}
+
+/order-sync:
+  post:
+    displayName: Synchronize confirmed orders
+    description: Authenticates with Cham Orders API, reads every page of confirmed orders and exports them to a canonical JSON file.
+    headers:
+      X-Correlation-ID?:
+        type: string
+        description: Correlation identifier propagated through the complete synchronization.
+        example: cham-integration-123
+    body:
+      application/json:
+        type: OrderSyncRequest
+    responses:
+      200:
+        headers:
+          X-Correlation-ID:
+            type: string
+        body:
+          application/json:
+            type: OrderSyncResponse
+
+      400:
+        headers:
+          X-Correlation-ID:
+            type: string
+        body:
+          application/json:
+            type: IntegrationError
+            example:
+              code: INVALID_REQUEST
+              message: The synchronization request is invalid.
+              timestamp: "2026-07-15T01:30:00-05:00"
+              path: /api/v1/order-sync
+              correlationId: cham-integration-123
+              fieldErrors: {}
+
+      401:
+        headers:
+          X-Correlation-ID:
+            type: string
+        body:
+          application/json:
+            type: IntegrationError
+            example:
+              code: CHAM_ORDERS_AUTHENTICATION_ERROR
+              message: Authentication with Cham Orders API failed.
+              timestamp: "2026-07-15T01:30:00-05:00"
+              path: /api/v1/order-sync
+              correlationId: cham-integration-123
+              fieldErrors: {}
+
+      502:
+        headers:
+          X-Correlation-ID:
+            type: string
+        body:
+          application/json:
+            type: IntegrationError
+            example:
+              code: CHAM_ORDERS_UNAVAILABLE
+              message: Cham Orders API is unavailable.
+              timestamp: "2026-07-15T01:30:00-05:00"
+              path: /api/v1/order-sync
+              correlationId: cham-integration-123
+              fieldErrors: {}
+
+      500:
+        headers:
+          X-Correlation-ID:
+            type: string
+        body:
+          application/json:
+            type: IntegrationError
+            example:
+              code: INTEGRATION_ERROR
+              message: An unexpected integration error occurred.
+              timestamp: "2026-07-15T01:30:00-05:00"
+              path: /api/v1/order-sync
+              correlationId: cham-integration-123
+              fieldErrors: {}
