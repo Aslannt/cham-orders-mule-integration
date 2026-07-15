@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/core
+        http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http
+        http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+	<sub-flow name="authenticate-cham-orders-subflow">
+		<http:request
+			doc:name="Authenticate with Cham Orders API"
+			config-ref="cham-orders-http-request-config" method="POST"
+			path="/auth/login" target="authResponse">
+			<http:body><![CDATA[#[output application/json
+---
+{
+    username: Mule::p("CHAM_ORDERS_USERNAME"),
+    password: Mule::p("CHAM_ORDERS_PASSWORD")
+}]]]></http:body>
+		</http:request>
+
+		<choice doc:name="Validate authentication response">
+			<when
+				expression="#[isEmpty(vars.authResponse.accessToken default '') or isEmpty(vars.authResponse.tokenType default '')]">
+				<raise-error type="CHAM_ORDERS:AUTHENTICATION_ERROR"
+					description="Cham Orders API authentication response did not include the required token information." />
+			</when>
+		</choice>
+
+		<set-variable doc:name="Set Cham Orders authorization"
+			variableName="chamOrdersAuthorization"
+			value="#[
+                    (vars.authResponse.tokenType as String)
+                    ++ ' '
+                    ++ (vars.authResponse.accessToken as String)
+                ]" />
+
+		<remove-variable
+			doc:name="Remove authentication response" variableName="authResponse" />
+	</sub-flow>
+
+</mule>
