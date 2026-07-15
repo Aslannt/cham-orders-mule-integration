@@ -152,8 +152,19 @@ output application/json
 	</flow>
 	<flow
 		name="post:\order-sync:application\json:cham-orders-integration-api-config">
+		<set-variable doc:name="Set sync status"
+			variableName="syncStatus" value="#[payload.status as String]" />
+
+		<set-variable doc:name="Set page size"
+			variableName="pageSize"
+			value="#[(payload.pageSize default 20) as Number]" />
+
+		<set-variable doc:name="Set current page"
+			variableName="currentPage" value="#[0]" />
 		<flow-ref doc:name="Authenticate with Cham Orders API"
 			name="authenticate-cham-orders-subflow" />
+		<flow-ref doc:name="Retrieve first Cham Orders page"
+			name="retrieve-cham-orders-page-subflow" />
 		<ee:transform doc:name="Transform Message">
 			<ee:message>
 				<ee:set-payload><![CDATA[%dw 2.0

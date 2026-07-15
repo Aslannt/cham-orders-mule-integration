@@ -44,4 +44,56 @@ http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/htt
 			doc:name="Remove authentication response" variableName="authResponse" />
 	</sub-flow>
 
+	<sub-flow name="retrieve-cham-orders-page-subflow">
+		<http:request doc:name="Retrieve Cham Orders page"
+			config-ref="cham-orders-http-request-config" method="GET"
+			path="/orders" sendBodyMode="NEVER" target="ordersPage">
+
+			<http:body><![CDATA[#[null]]]></http:body>
+
+			<http:headers><![CDATA[#[output application/java
+---
+{
+    "Authorization": vars.chamOrdersAuthorization
+}]]]></http:headers>
+
+			<http:query-params><![CDATA[#[output application/java
+---
+{
+    status: vars.syncStatus,
+    page: vars.currentPage as String,
+    size: vars.pageSize as String
+}]]]></http:query-params>
+		</http:request>
+
+		<choice doc:name="Validate orders page response">
+			<when
+				expression="#[
+    vars.ordersPage.content == null
+    or vars.ordersPage.page == null
+    or vars.ordersPage.size == null
+    or vars.ordersPage.totalElements == null
+    or vars.ordersPage.totalPages == null
+    or vars.ordersPage.first == null
+    or vars.ordersPage.last == null
+]">
+				<raise-error type="CHAM_ORDERS:INVALID_RESPONSE"
+					description="Cham Orders API returned an invalid paginated orders response." />
+			</when>
+		</choice>
+
+		<logger doc:name="Log retrieved orders page" level="INFO"
+			message="#[write({
+            message: 'Cham Orders page retrieved',
+            correlationId: correlationId,
+            page: vars.ordersPage.page,
+            size: vars.ordersPage.size,
+            orders: sizeOf(vars.ordersPage.content default []),
+            totalElements: vars.ordersPage.totalElements,
+            totalPages: vars.ordersPage.totalPages,
+            first: vars.ordersPage.first,
+            last: vars.ordersPage.last
+        }, 'application/json')]" />
+	</sub-flow>
+
 </mule>
