@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core
+		http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/ee/core
+		http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<sub-flow name="build-integration-error-response-subflow">
+		<ee:transform doc:name="Build integration error response">
+			<ee:message>
+				<ee:set-payload resource="dw/integration-error.dwl" />
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="outboundHeaders"><![CDATA[%dw 2.0
+output application/java
+---
+{
+    "Content-Type": "application/json"
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+	</sub-flow>
+
+	<error-handler name="order-sync-global-error-handler">
+		<on-error-propagate type="APIKIT:BAD_REQUEST"
+			logException="false">
+			<set-variable doc:name="Set HTTP status" variableName="httpStatus"
+				value="#[400]" />
+			<set-variable doc:name="Set error code" variableName="errorCode"
+				value="INVALID_REQUEST" />
+			<set-variable doc:name="Set error message"
+				variableName="errorMessage"
+				value="The synchronization request is invalid." />
+			<flow-ref doc:name="Build error response"
+				name="build-integration-error-response-subflow" />
+		</on-error-propagate>
+
+		<on-error-propagate type="APIKIT:NOT_FOUND"
+			logException="false">
+			<set-variable doc:name="Set HTTP status" variableName="httpStatus"
+				value="#[404]" />
+			<set-variable doc:name="Set error code" variableName="errorCode"
+				value="RESOURCE_NOT_FOUND" />
+			<set-variable doc:name="Set error message"
+				variableName="errorMessage" value="The requested resource was not found." />
+			<flow-ref doc:name="Build error response"
+				name="build-integration-error-response-subflow" />
+		</on-error-propagate>
+
+		<on-error-propagate type="APIKIT:METHOD_NOT_ALLOWED"
+			logException="false">
+			<set-variable doc:name="Set HTTP status" variableName="httpStatus"
+				value="#[405]" />
+			<set-variable doc:name="Set error code" variableName="errorCode"
+				value="METHOD_NOT_ALLOWED" />
+			<set-variable doc:name="Set error message"
+				variableName="errorMessage"
+				value="The requested method is not allowed." />
+			<flow-ref doc:name="Build error response"
+				name="build-integration-error-response-subflow" />
+		</on-error-propagate>
+
+		<on-error-propagate type="APIKIT:NOT_ACCEPTABLE"
+			logException="false">
+			<set-variable doc:name="Set HTTP status" variableName="httpStatus"
+				value="#[406]" />
+			<set-variable doc:name="Set error code" variableName="errorCode"
+				value="NOT_ACCEPTABLE" />
+			<set-variable doc:name="Set error message"
+				variableName="errorMessage"
+				value="The requested response media type is not supported." />
+			<flow-ref doc:name="Build error response"
+				name="build-integration-error-response-subflow" />
+		</on-error-propagate>
+
+		<on-error-propagate type="APIKIT:UNSUPPORTED_MEDIA_TYPE"
+			logException="false">
+			<set-variable doc:name="Set HTTP status" variableName="httpStatus"
+				value="#[415]" />
+			<set-variable doc:name="Set error code" variableName="errorCode"
+				value="UNSUPPORTED_MEDIA_TYPE" />
+			<set-variable doc:name="Set error message"
+				variableName="errorMessage"
+				value="The request media type is not supported." />
+			<flow-ref doc:name="Build error response"
+				name="build-integration-error-response-subflow" />
+		</on-error-propagate>
+
+		<on-error-propagate type="APIKIT:NOT_IMPLEMENTED"
+			logException="false">
+			<set-variable doc:name="Set HTTP status" variableName="httpStatus"
+				value="#[501]" />
+			<set-variable doc:name="Set error code" variableName="errorCode"
+				value="NOT_IMPLEMENTED" />
+			<set-variable doc:name="Set error message"
+				variableName="errorMessage"
+				value="The requested operation is not implemented." />
+			<flow-ref doc:name="Build error response"
+				name="build-integration-error-response-subflow" />
+		</on-error-propagate>
+
+		<on-error-propagate
+			type="CHAM_ORDERS:AUTHENTICATION_ERROR,HTTP:UNAUTHORIZED,HTTP:FORBIDDEN"
+			logException="false">
+			<logger doc:name="Log Cham Orders authentication failure"
+				level="WARN"
+				message="#[write({
+                    message: 'Authentication with Cham Orders API failed',
+                    correlationId: correlationId,
+                    errorType: (error.errorType.namespace as String) ++ ':' ++ (error.errorType.identifier as String)
+                }, 'application/json')]" />
+			<set-variable doc:name="Set HTTP status" variableName="httpStatus"
+				value="#[401]" />
+			<set-variable doc:name="Set error code" variableName="errorCode"
+				value="CHAM_ORDERS_AUTHENTICATION_ERROR" />
+			<set-variable doc:name="Set error message"
+				variableName="errorMessage"
+				value="Authentication with Cham Orders API failed." />
+			<flow-ref doc:name="Build error response"
+				name="build-integration-error-response-subflow" />
+		</on-error-propagate>
+
+		<on-error-propagate type="CHAM_ORDERS:INVALID_RESPONSE"
+			logException="false">
+			<logger doc:name="Log invalid Cham Orders response" level="ERROR"
+				message="#[write({
+                    message: 'Cham Orders API returned an invalid response',
+                    correlationId: correlationId,
+                    errorType: (error.errorType.namespace as String) ++ ':' ++ (error.errorType.identifier as String)
+                }, 'application/json')]" />
+			<set-variable doc:name="Set HTTP status" variableName="httpStatus"
+				value="#[502]" />
+			<set-variable doc:name="Set error code" variableName="errorCode"
+				value="CHAM_ORDERS_UNAVAILABLE" />
+			<set-variable doc:name="Set error message"
+				variableName="errorMessage"
+				value="Cham Orders API returned an invalid response." />
+			<flow-ref doc:name="Build error response"
+				name="build-integration-error-response-subflow" />
+		</on-error-propagate>
+
+		<on-error-propagate
+			when="#[error.errorType.namespace == 'HTTP']"
+			logException="false">
+			<logger doc:name="Log Cham Orders unavailability" level="ERROR"
+				message="#[write({
+                    message: 'Cham Orders API request failed',
+                    correlationId: correlationId,
+                    errorType: (error.errorType.namespace as String) ++ ':' ++ (error.errorType.identifier as String)
+                }, 'application/json')]" />
+			<set-variable doc:name="Set HTTP status" variableName="httpStatus"
+				value="#[502]" />
+			<set-variable doc:name="Set error code" variableName="errorCode"
+				value="CHAM_ORDERS_UNAVAILABLE" />
+			<set-variable doc:name="Set error message"
+				variableName="errorMessage"
+				value="Cham Orders API is unavailable." />
+			<flow-ref doc:name="Build error response"
+				name="build-integration-error-response-subflow" />
+		</on-error-propagate>
+
+		<on-error-propagate type="ANY" logException="true">
+			<set-variable doc:name="Set HTTP status" variableName="httpStatus"
+				value="#[500]" />
+			<set-variable doc:name="Set error code" variableName="errorCode"
+				value="INTEGRATION_ERROR" />
+			<set-variable doc:name="Set error message"
+				variableName="errorMessage"
+				value="An unexpected integration error occurred." />
+			<flow-ref doc:name="Build error response"
+				name="build-integration-error-response-subflow" />
+		</on-error-propagate>
+	</error-handler>
+</mule>

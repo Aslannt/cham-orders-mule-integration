@@ -1,21 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
 	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
 	xmlns="http://www.mulesoft.org/schema/mule/core"
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="
-http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
 		http://www.mulesoft.org/schema/mule/core
 		http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/file
+		http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
 		http://www.mulesoft.org/schema/mule/http
 		http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
 
 	<global-property doc:name="Environment" name="env"
 		value="local" />
 
-	<configuration-properties
-		doc:name="Configuration properties" file="config-${env}.yaml" />
+	<configuration-properties doc:name="Configuration properties"
+		file="config-${env}.yaml" />
 
 	<http:listener-config
 		name="cham-orders-integration-api-httpListenerConfig"
@@ -23,14 +25,18 @@ http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/htt
 		<http:listener-connection host="${http.host}"
 			port="${http.port}" />
 	</http:listener-config>
-	<http:request-config
-		name="cham-orders-http-request-config"
+
+	<http:request-config name="cham-orders-http-request-config"
+		doc:name="Cham Orders HTTP request configuration"
 		basePath="${chamOrders.basePath}"
 		responseTimeout="${chamOrders.responseTimeoutMillis}"
 		sendCorrelationId="ALWAYS">
-		<http:request-connection
-			protocol="${chamOrders.protocol}" host="${chamOrders.host}"
-			port="${chamOrders.port}" />
+		<http:request-connection protocol="${chamOrders.protocol}"
+			host="${chamOrders.host}" port="${chamOrders.port}" />
 	</http:request-config>
 
+	<file:config name="cham-orders-file-config"
+		doc:name="Cham Orders output file configuration">
+		<file:connection workingDir="." />
+	</file:config>
 </mule>

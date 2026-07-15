@@ -2,14 +2,13 @@
 
 <mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
 	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="
-http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-        http://www.mulesoft.org/schema/mule/core
-        http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-        http://www.mulesoft.org/schema/mule/http
-        http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+		http://www.mulesoft.org/schema/mule/core
+		http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/http
+		http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
 
 	<sub-flow name="authenticate-cham-orders-subflow">
 		<http:request
@@ -35,10 +34,10 @@ http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/htt
 		<set-variable doc:name="Set Cham Orders authorization"
 			variableName="chamOrdersAuthorization"
 			value="#[
-                    (vars.authResponse.tokenType as String)
-                    ++ ' '
-                    ++ (vars.authResponse.accessToken as String)
-                ]" />
+                (vars.authResponse.tokenType as String)
+                ++ ' '
+                ++ (vars.authResponse.accessToken as String)
+            ]" />
 
 		<remove-variable
 			doc:name="Remove authentication response" variableName="authResponse" />
@@ -48,15 +47,12 @@ http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/htt
 		<http:request doc:name="Retrieve Cham Orders page"
 			config-ref="cham-orders-http-request-config" method="GET"
 			path="/orders" sendBodyMode="NEVER" target="ordersPage">
-
 			<http:body><![CDATA[#[null]]]></http:body>
-
 			<http:headers><![CDATA[#[output application/java
 ---
 {
     "Authorization": vars.chamOrdersAuthorization
 }]]]></http:headers>
-
 			<http:query-params><![CDATA[#[output application/java
 ---
 {
@@ -69,14 +65,16 @@ http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/htt
 		<choice doc:name="Validate orders page response">
 			<when
 				expression="#[
-    vars.ordersPage.content == null
-    or vars.ordersPage.page == null
-    or vars.ordersPage.size == null
-    or vars.ordersPage.totalElements == null
-    or vars.ordersPage.totalPages == null
-    or vars.ordersPage.first == null
-    or vars.ordersPage.last == null
-]">
+                vars.ordersPage.content == null
+                or vars.ordersPage.page == null
+                or vars.ordersPage.size == null
+                or vars.ordersPage.totalElements == null
+                or vars.ordersPage.totalPages == null
+                or vars.ordersPage.first == null
+                or vars.ordersPage.last == null
+                or ((vars.ordersPage.page as Number) != (vars.currentPage as Number))
+                or ((vars.ordersPage.size as Number) != (vars.pageSize as Number))
+            ]">
 				<raise-error type="CHAM_ORDERS:INVALID_RESPONSE"
 					description="Cham Orders API returned an invalid paginated orders response." />
 			</when>
@@ -84,16 +82,88 @@ http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/htt
 
 		<logger doc:name="Log retrieved orders page" level="INFO"
 			message="#[write({
-            message: 'Cham Orders page retrieved',
-            correlationId: correlationId,
-            page: vars.ordersPage.page,
-            size: vars.ordersPage.size,
-            orders: sizeOf(vars.ordersPage.content default []),
-            totalElements: vars.ordersPage.totalElements,
-            totalPages: vars.ordersPage.totalPages,
-            first: vars.ordersPage.first,
-            last: vars.ordersPage.last
-        }, 'application/json')]" />
+                message: 'Cham Orders page retrieved',
+                correlationId: correlationId,
+                page: vars.ordersPage.page,
+                size: vars.ordersPage.size,
+                orders: sizeOf(vars.ordersPage.content default []),
+                totalElements: vars.ordersPage.totalElements,
+                totalPages: vars.ordersPage.totalPages,
+                first: vars.ordersPage.first,
+                last: vars.ordersPage.last
+            }, 'application/json')]" />
 	</sub-flow>
 
+	<sub-flow name="retrieve-all-confirmed-orders-subflow">
+		<set-variable doc:name="Set first page"
+			variableName="currentPage" value="#[0]" />
+		<set-variable doc:name="Initialize confirmed orders"
+			variableName="confirmedOrders" value="#[[]]" />
+
+		<flow-ref doc:name="Retrieve first Cham Orders page"
+			name="retrieve-cham-orders-page-subflow" />
+
+		<set-variable doc:name="Set expected total pages"
+			variableName="expectedTotalPages"
+			value="#[(vars.ordersPage.totalPages default 0) as Number]" />
+		<set-variable doc:name="Set expected total elements"
+			variableName="expectedTotalElements"
+			value="#[(vars.ordersPage.totalElements default 0) as Number]" />
+		<set-variable doc:name="Collect first orders page"
+			variableName="confirmedOrders"
+			value="#[output application/java
+---
+(vars.confirmedOrders default []) ++ (vars.ordersPage.content default [])]" />
+
+		<choice doc:name="Retrieve remaining pages">
+			<when expression="#[vars.expectedTotalPages > 1]">
+				<foreach doc:name="For each remaining page"
+					collection="#[1 to (vars.expectedTotalPages - 1)]">
+					<set-variable doc:name="Set current page"
+						variableName="currentPage" value="#[payload as Number]" />
+					<flow-ref doc:name="Retrieve Cham Orders page"
+						name="retrieve-cham-orders-page-subflow" />
+
+					<choice doc:name="Validate pagination consistency">
+						<when
+							expression="#[
+                                (vars.ordersPage.totalPages as Number) != vars.expectedTotalPages
+                                or (vars.ordersPage.totalElements as Number) != vars.expectedTotalElements
+                            ]">
+							<raise-error type="CHAM_ORDERS:INVALID_RESPONSE"
+								description="Cham Orders API pagination metadata changed during synchronization." />
+						</when>
+					</choice>
+
+					<set-variable doc:name="Collect orders page"
+						variableName="confirmedOrders"
+						value="#[output application/java
+---
+(vars.confirmedOrders default []) ++ (vars.ordersPage.content default [])]" />
+				</foreach>
+			</when>
+		</choice>
+
+		<choice doc:name="Validate collected orders count">
+			<when
+				expression="#[sizeOf(vars.confirmedOrders default []) != vars.expectedTotalElements]">
+				<raise-error type="CHAM_ORDERS:INVALID_RESPONSE"
+					description="Cham Orders API pagination did not return the expected number of orders." />
+			</when>
+		</choice>
+
+		<remove-variable doc:name="Remove orders page"
+			variableName="ordersPage" />
+		<remove-variable doc:name="Remove current page"
+			variableName="currentPage" />
+		<remove-variable
+			doc:name="Remove expected total pages"
+			variableName="expectedTotalPages" />
+		<remove-variable
+			doc:name="Remove expected total elements"
+			variableName="expectedTotalElements" />
+		<remove-variable
+			doc:name="Remove Cham Orders authorization"
+			variableName="chamOrdersAuthorization" />
+	</sub-flow>
 </mule>
