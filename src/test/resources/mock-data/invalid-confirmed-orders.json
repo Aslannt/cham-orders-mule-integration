@@ -1,0 +1,17 @@
+[
+  {
+    "id": "33333333-3333-3333-3333-333333333333",
+    "customerId": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+    "status": "PENDING",
+    "total": 10.00,
+    "items": [
+      {
+        "productSku": "INVALID-001",
+        "productName": "Invalid downstream order",
+        "quantity": 1,
+        "unitPrice": 10.00,
+        "subtotal": 10.00
+      }
+    ]
+  }
+]

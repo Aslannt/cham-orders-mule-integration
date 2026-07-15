@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+	xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd 
+		http://www.mulesoft.org/schema/mule/core
+		http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/file
+		http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+		http://www.mulesoft.org/schema/mule/munit
+		http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools
+		http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+
+	<munit:config name="order-sync-test-suite" />
+
+	<flow name="capture-canonical-output-test-subflow">
+		<set-variable variableName="writtenCanonicalPayload"
+			value="#[payload]" />
+	</flow>
+
+	<munit:test name="process-order-sync-success-test"
+		description="Transforms confirmed orders, simulates the output write, and returns a completed summary.">
+
+		<munit:behavior>
+			<munit-tools:mock-when processor="flow-ref">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute
+						attributeName="name"
+						whereValue="#[&quot;authenticate-cham-orders-subflow&quot;]" />
+				</munit-tools:with-attributes>
+			</munit-tools:mock-when>
+
+			<munit-tools:mock-when processor="flow-ref">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute
+						attributeName="name"
+						whereValue="#[&quot;retrieve-all-confirmed-orders-subflow&quot;]" />
+				</munit-tools:with-attributes>
+
+				<munit-tools:then-return>
+					<munit-tools:variables>
+						<munit-tools:variable key="confirmedOrders"
+							value="#[readUrl('classpath://mock-data/confirmed-orders.json', 'application/json')]" />
+					</munit-tools:variables>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+
+			<munit-tools:mock-when processor="file:write">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute
+						attributeName="doc:name"
+						whereValue="#[&quot;Write canonical orders file&quot;]" />
+				</munit-tools:with-attributes>
+
+				<munit-tools:then-call
+					flow="capture-canonical-output-test-subflow" />
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<munit:set-event cloneOriginalEvent="false">
+				<munit:payload value="#[{ status: 'CONFIRMED' }]"
+					mediaType="application/java" />
+			</munit:set-event>
+
+			<flow-ref name="process-order-sync-subflow" />
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that
+				expression="#[payload.status]"
+				is="#[MunitTools::equalTo('COMPLETED')]"
+				message="The synchronization status must be COMPLETED." />
+
+			<munit-tools:assert-that
+				expression="#[payload.ordersRead]" is="#[MunitTools::equalTo(2)]"
+				message="Two orders must be read." />
+
+			<munit-tools:assert-that
+				expression="#[payload.ordersExported]"
+				is="#[MunitTools::equalTo(2)]"
+				message="Two orders must be exported." />
+
+			<munit-tools:assert-that
+				expression="#[vars.pageSize]" is="#[MunitTools::equalTo(20)]"
+				message="The default page size must be 20." />
+
+			<munit-tools:assert-that
+				expression="#[startsWith(payload.outputFile, 'confirmed-orders-') and endsWith(payload.outputFile, '.json')]"
+				is="#[MunitTools::equalTo(true)]"
+				message="The output filename must follow the confirmed orders convention." />
+
+			<munit-tools:assert-that
+				expression="#[vars.writtenCanonicalPayload.source]"
+				is="#[MunitTools::equalTo('CHAM_ORDERS')]"
+				message="The canonical source must be CHAM_ORDERS." />
+
+			<munit-tools:assert-that
+				expression="#[sizeOf(vars.writtenCanonicalPayload.orders)]"
+				is="#[MunitTools::equalTo(2)]"
+				message="The canonical payload must contain two orders." />
+
+			<munit-tools:assert-that
+				expression="#[vars.writtenCanonicalPayload.orders[0].orderId]"
+				is="#[MunitTools::equalTo('11111111-1111-1111-1111-111111111111')]"
+				message="The backend order id must map to canonical orderId." />
+
+			<munit-tools:assert-that
+				expression="#[vars.writtenCanonicalPayload.orders[0].items[0].sku]"
+				is="#[MunitTools::equalTo('NOTE-001')]"
+				message="The product SKU snapshot must map to canonical sku." />
+
+			<munit-tools:assert-that
+				expression="#[vars.writtenCanonicalPayload.correlationId]"
+				is="#[MunitTools::equalTo(payload.correlationId)]"
+				message="The response and canonical payload must use the same correlation ID." />
+
+			<munit-tools:verify-call processor="flow-ref"
+				times="1">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute
+						attributeName="name"
+						whereValue="#[&quot;authenticate-cham-orders-subflow&quot;]" />
+				</munit-tools:with-attributes>
+			</munit-tools:verify-call>
+
+			<munit-tools:verify-call processor="flow-ref"
+				times="1">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute
+						attributeName="name"
+						whereValue="#[&quot;retrieve-all-confirmed-orders-subflow&quot;]" />
+				</munit-tools:with-attributes>
+			</munit-tools:verify-call>
+
+			<munit-tools:verify-call
+				processor="file:write" times="1">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute
+						attributeName="doc:name"
+						whereValue="#[&quot;Write canonical orders file&quot;]" />
+				</munit-tools:with-attributes>
+			</munit-tools:verify-call>
+		</munit:validation>
+	</munit:test>
+
+	<munit:test
+		name="process-order-sync-invalid-downstream-order-test"
+		description="Rejects an order that cannot be mapped to the confirmed canonical model."
+		expectedErrorType="CHAM_ORDERS:INVALID_RESPONSE">
+
+		<munit:behavior>
+			<munit-tools:mock-when processor="flow-ref">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute
+						attributeName="name"
+						whereValue="#[&quot;authenticate-cham-orders-subflow&quot;]" />
+				</munit-tools:with-attributes>
+			</munit-tools:mock-when>
+
+			<munit-tools:mock-when processor="flow-ref">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute
+						attributeName="name"
+						whereValue="#[&quot;retrieve-all-confirmed-orders-subflow&quot;]" />
+				</munit-tools:with-attributes>
+
+				<munit-tools:then-return>
+					<munit-tools:variables>
+						<munit-tools:variable key="confirmedOrders"
+							value="#[readUrl('classpath://mock-data/invalid-confirmed-orders.json', 'application/json')]" />
+					</munit-tools:variables>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<munit:set-event cloneOriginalEvent="false">
+				<munit:payload
+					value="#[{ status: 'CONFIRMED', pageSize: 10 }]"
+					mediaType="application/java" />
+			</munit:set-event>
+
+			<flow-ref name="process-order-sync-subflow" />
+		</munit:execution>
+	</munit:test>
+
+</mule>
