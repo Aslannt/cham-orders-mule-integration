@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+	xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core
+		http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/mule-apikit
+		http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd
+		http://www.mulesoft.org/schema/mule/munit
+		http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools
+		http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+
+	<munit:config name="error-handler-invalid-request-test-suite" />
+
+	<flow name="raise-invalid-request-test-flow">
+		<apikit:router config-ref="cham-orders-integration-api-config" />
+		<error-handler ref="order-sync-global-error-handler" />
+	</flow>
+
+	<munit:test name="global-error-handler-invalid-request-test"
+		description="Maps an APIKit bad request to the stable integration error contract.">
+		<munit:behavior>
+			<munit-tools:mock-when processor="apikit:router">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="config-ref"
+						whereValue="#[&quot;cham-orders-integration-api-config&quot;]" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:error typeId="#[&quot;APIKIT:BAD_REQUEST&quot;]" />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<munit:set-event cloneOriginalEvent="false">
+				<munit:payload value="#[{}]" mediaType="application/java" />
+			</munit:set-event>
+
+			<try>
+				<flow-ref name="raise-invalid-request-test-flow" />
+				<error-handler>
+					<on-error-continue type="APIKIT:BAD_REQUEST"
+						logException="false" />
+				</error-handler>
+			</try>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that expression="#[vars.httpStatus]"
+				is="#[MunitTools::equalTo(400)]"
+				message="The HTTP status must be 400." />
+			<munit-tools:assert-that expression="#[payload.code]"
+				is="#[MunitTools::equalTo('INVALID_REQUEST')]"
+				message="The error code must be INVALID_REQUEST." />
+			<munit-tools:assert-that expression="#[payload.message]"
+				is="#[MunitTools::equalTo('The synchronization request is invalid.')]"
+				message="The invalid request message must remain stable." />
+			<munit-tools:assert-that expression="#[payload.correlationId]"
+				is="#[MunitTools::equalTo(correlationId)]"
+				message="The error response must propagate the correlation ID." />
+			<munit-tools:assert-that expression="#[payload.path]"
+				is="#[MunitTools::equalTo('/api/v1/order-sync')]"
+				message="The default integration path must be present." />
+			<munit-tools:assert-that
+				expression="#[vars.outboundHeaders['Content-Type']]"
+				is="#[MunitTools::equalTo('application/json')]"
+				message="The response Content-Type must be application/json." />
+		</munit:validation>
+	</munit:test>
+
+</mule>

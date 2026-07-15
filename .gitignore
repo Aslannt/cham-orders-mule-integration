@@ -63,3 +63,6 @@ output/
 
 # Windows
 Thumbs.db
+
+# Generated test and coverage reports
+reports/

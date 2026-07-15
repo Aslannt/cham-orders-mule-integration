@@ -1,0 +1,278 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+	xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core
+		http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/http
+		http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+		http://www.mulesoft.org/schema/mule/munit
+		http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools
+		http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+
+	<munit:config name="cham-orders-client-test-suite" />
+
+	<flow name="return-valid-orders-page-test-flow">
+		<choice>
+			<when expression="#[vars.currentPage == 0]">
+				<set-variable variableName="ordersPage"
+					value="#[readUrl('classpath://mock-data/orders-page-0.json', 'application/json')]" />
+			</when>
+			<otherwise>
+				<set-variable variableName="ordersPage"
+					value="#[readUrl('classpath://mock-data/orders-page-1.json', 'application/json')]" />
+			</otherwise>
+		</choice>
+	</flow>
+
+	<flow name="return-inconsistent-orders-page-test-flow">
+		<choice>
+			<when expression="#[vars.currentPage == 0]">
+				<set-variable variableName="ordersPage"
+					value="#[readUrl('classpath://mock-data/orders-page-0.json', 'application/json')]" />
+			</when>
+			<otherwise>
+				<set-variable variableName="ordersPage"
+					value="#[readUrl('classpath://mock-data/inconsistent-orders-page-1.json', 'application/json')]" />
+			</otherwise>
+		</choice>
+	</flow>
+
+	<munit:test name="authenticate-cham-orders-success-test"
+		description="Builds the downstream Authorization header from a valid login response.">
+		<munit:behavior>
+			<munit-tools:mock-when processor="http:request">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="doc:name"
+						whereValue="#[&quot;Authenticate with Cham Orders API&quot;]" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:variables>
+						<munit-tools:variable key="authResponse"
+							value="#[{ accessToken: 'test-access-token', tokenType: 'Bearer' }]" />
+					</munit-tools:variables>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<munit:set-event cloneOriginalEvent="false">
+				<munit:payload value="#[null]" />
+			</munit:set-event>
+			<flow-ref name="authenticate-cham-orders-subflow" />
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that
+				expression="#[vars.chamOrdersAuthorization]"
+				is="#[MunitTools::equalTo('Bearer test-access-token')]"
+				message="The Authorization value must contain the token type and access token." />
+			<munit-tools:assert-that
+				expression="#[vars.authResponse default null]"
+				is="#[MunitTools::nullValue()]"
+				message="The authentication response must be removed after use." />
+			<munit-tools:verify-call processor="http:request" times="1">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="doc:name"
+						whereValue="#[&quot;Authenticate with Cham Orders API&quot;]" />
+				</munit-tools:with-attributes>
+			</munit-tools:verify-call>
+		</munit:validation>
+	</munit:test>
+
+	<munit:test name="authenticate-cham-orders-invalid-response-test"
+		description="Rejects a login response without an access token."
+		expectedErrorType="CHAM_ORDERS:AUTHENTICATION_ERROR">
+		<munit:behavior>
+			<munit-tools:mock-when processor="http:request">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="doc:name"
+						whereValue="#[&quot;Authenticate with Cham Orders API&quot;]" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:variables>
+						<munit-tools:variable key="authResponse"
+							value="#[{ tokenType: 'Bearer' }]" />
+					</munit-tools:variables>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<munit:set-event cloneOriginalEvent="false">
+				<munit:payload value="#[null]" />
+			</munit:set-event>
+			<flow-ref name="authenticate-cham-orders-subflow" />
+		</munit:execution>
+	</munit:test>
+
+	<munit:test name="retrieve-cham-orders-page-success-test"
+		description="Accepts a valid paginated orders response from Cham Orders API.">
+		<munit:behavior>
+			<munit-tools:mock-when processor="http:request">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="doc:name"
+						whereValue="#[&quot;Retrieve Cham Orders page&quot;]" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:variables>
+						<munit-tools:variable key="ordersPage"
+							value="#[readUrl('classpath://mock-data/orders-page-0.json', 'application/json')]" />
+					</munit-tools:variables>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<munit:set-event cloneOriginalEvent="false">
+				<munit:payload value="#[null]" />
+				<munit:variables>
+					<munit:variable key="syncStatus" value="#[&quot;CONFIRMED&quot;]" />
+					<munit:variable key="currentPage" value="#[0]" />
+					<munit:variable key="pageSize" value="#[1]" />
+					<munit:variable key="chamOrdersAuthorization"
+						value="#[&quot;Bearer test-access-token&quot;]" />
+				</munit:variables>
+			</munit:set-event>
+			<flow-ref name="retrieve-cham-orders-page-subflow" />
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that expression="#[vars.ordersPage.page]"
+				is="#[MunitTools::equalTo(0)]"
+				message="The first response page must be zero." />
+			<munit-tools:assert-that
+				expression="#[vars.ordersPage.content[0].id]"
+				is="#[MunitTools::equalTo('11111111-1111-1111-1111-111111111111')]"
+				message="The first page must contain the expected order." />
+			<munit-tools:verify-call processor="http:request" times="1">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="doc:name"
+						whereValue="#[&quot;Retrieve Cham Orders page&quot;]" />
+				</munit-tools:with-attributes>
+			</munit-tools:verify-call>
+		</munit:validation>
+	</munit:test>
+
+	<munit:test name="retrieve-cham-orders-page-invalid-response-test"
+		description="Rejects a paginated response without all required metadata."
+		expectedErrorType="CHAM_ORDERS:INVALID_RESPONSE">
+		<munit:behavior>
+			<munit-tools:mock-when processor="http:request">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="doc:name"
+						whereValue="#[&quot;Retrieve Cham Orders page&quot;]" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:variables>
+						<munit-tools:variable key="ordersPage"
+							value="#[readUrl('classpath://mock-data/invalid-orders-page.json', 'application/json')]" />
+					</munit-tools:variables>
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<munit:set-event cloneOriginalEvent="false">
+				<munit:payload value="#[null]" />
+				<munit:variables>
+					<munit:variable key="syncStatus" value="#[&quot;CONFIRMED&quot;]" />
+					<munit:variable key="currentPage" value="#[0]" />
+					<munit:variable key="pageSize" value="#[1]" />
+					<munit:variable key="chamOrdersAuthorization"
+						value="#[&quot;Bearer test-access-token&quot;]" />
+				</munit:variables>
+			</munit:set-event>
+			<flow-ref name="retrieve-cham-orders-page-subflow" />
+		</munit:execution>
+	</munit:test>
+
+	<munit:test name="retrieve-all-confirmed-orders-pagination-test"
+		description="Collects two confirmed orders from two downstream pages.">
+		<munit:behavior>
+			<munit-tools:mock-when processor="flow-ref">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="name"
+						whereValue="#[&quot;retrieve-cham-orders-page-subflow&quot;]" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-call flow="return-valid-orders-page-test-flow" />
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<munit:set-event cloneOriginalEvent="false">
+				<munit:payload value="#[null]" />
+				<munit:variables>
+					<munit:variable key="syncStatus" value="#[&quot;CONFIRMED&quot;]" />
+					<munit:variable key="pageSize" value="#[1]" />
+					<munit:variable key="chamOrdersAuthorization"
+						value="#[&quot;Bearer test-access-token&quot;]" />
+				</munit:variables>
+			</munit:set-event>
+			<flow-ref name="retrieve-all-confirmed-orders-subflow" />
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that
+				expression="#[sizeOf(vars.confirmedOrders)]"
+				is="#[MunitTools::equalTo(2)]"
+				message="Two orders must be collected from two pages." />
+			<munit-tools:assert-that
+				expression="#[vars.confirmedOrders[0].id]"
+				is="#[MunitTools::equalTo('11111111-1111-1111-1111-111111111111')]"
+				message="The first order must come from page zero." />
+			<munit-tools:assert-that
+				expression="#[vars.confirmedOrders[1].id]"
+				is="#[MunitTools::equalTo('22222222-2222-2222-2222-222222222222')]"
+				message="The second order must come from page one." />
+			<munit-tools:assert-that
+				expression="#[vars.ordersPage default null]"
+				is="#[MunitTools::nullValue()]"
+				message="The temporary page response must be removed." />
+			<munit-tools:assert-that
+				expression="#[vars.chamOrdersAuthorization default null]"
+				is="#[MunitTools::nullValue()]"
+				message="The downstream authorization value must be removed." />
+			<munit-tools:verify-call processor="flow-ref" times="2">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="name"
+						whereValue="#[&quot;retrieve-cham-orders-page-subflow&quot;]" />
+				</munit-tools:with-attributes>
+			</munit-tools:verify-call>
+		</munit:validation>
+	</munit:test>
+
+	<munit:test name="retrieve-all-confirmed-orders-inconsistent-metadata-test"
+		description="Rejects pagination metadata that changes between pages."
+		expectedErrorType="CHAM_ORDERS:INVALID_RESPONSE">
+		<munit:behavior>
+			<munit-tools:mock-when processor="flow-ref">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="name"
+						whereValue="#[&quot;retrieve-cham-orders-page-subflow&quot;]" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-call
+					flow="return-inconsistent-orders-page-test-flow" />
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<munit:set-event cloneOriginalEvent="false">
+				<munit:payload value="#[null]" />
+				<munit:variables>
+					<munit:variable key="syncStatus" value="#[&quot;CONFIRMED&quot;]" />
+					<munit:variable key="pageSize" value="#[1]" />
+					<munit:variable key="chamOrdersAuthorization"
+						value="#[&quot;Bearer test-access-token&quot;]" />
+				</munit:variables>
+			</munit:set-event>
+			<flow-ref name="retrieve-all-confirmed-orders-subflow" />
+		</munit:execution>
+	</munit:test>
+
+</mule>

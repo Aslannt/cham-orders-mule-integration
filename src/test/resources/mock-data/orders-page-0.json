@@ -1,0 +1,17 @@
+{
+  "content": [
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "customerId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "status": "CONFIRMED",
+      "total": 59.85,
+      "items": []
+    }
+  ],
+  "page": 0,
+  "size": 1,
+  "totalElements": 2,
+  "totalPages": 2,
+  "first": true,
+  "last": false
+}

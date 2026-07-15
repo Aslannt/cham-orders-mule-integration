@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+	xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core
+		http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/http
+		http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+		http://www.mulesoft.org/schema/mule/munit
+		http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools
+		http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+
+	<munit:config name="error-handler-authentication-test-suite" />
+
+	<flow name="raise-authentication-error-test-flow">
+		<http:request config-ref="cham-orders-http-request-config"
+			method="POST" path="/auth/login" />
+		<error-handler ref="order-sync-global-error-handler" />
+	</flow>
+
+	<munit:test name="global-error-handler-authentication-test"
+		description="Maps a downstream authentication failure to the stable integration error contract.">
+		<munit:behavior>
+			<munit-tools:mock-when processor="http:request">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="config-ref"
+						whereValue="#[&quot;cham-orders-http-request-config&quot;]" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:error typeId="#[&quot;HTTP:UNAUTHORIZED&quot;]" />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<munit:set-event cloneOriginalEvent="false">
+				<munit:payload value="#[{}]" mediaType="application/java" />
+			</munit:set-event>
+
+			<try>
+				<flow-ref name="raise-authentication-error-test-flow" />
+				<error-handler>
+					<on-error-continue
+						type="HTTP:UNAUTHORIZED"
+						logException="false" />
+				</error-handler>
+			</try>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that expression="#[vars.httpStatus]"
+				is="#[MunitTools::equalTo(401)]"
+				message="The HTTP status must be 401." />
+			<munit-tools:assert-that expression="#[payload.code]"
+				is="#[MunitTools::equalTo('CHAM_ORDERS_AUTHENTICATION_ERROR')]"
+				message="The authentication error code must remain stable." />
+			<munit-tools:assert-that expression="#[payload.message]"
+				is="#[MunitTools::equalTo('Authentication with Cham Orders API failed.')]"
+				message="The authentication error message must remain stable." />
+			<munit-tools:assert-that expression="#[payload.correlationId]"
+				is="#[MunitTools::equalTo(correlationId)]"
+				message="The error response must propagate the correlation ID." />
+			<munit-tools:assert-that
+				expression="#[vars.outboundHeaders['Content-Type']]"
+				is="#[MunitTools::equalTo('application/json')]"
+				message="The response Content-Type must be application/json." />
+		</munit:validation>
+	</munit:test>
+
+</mule>

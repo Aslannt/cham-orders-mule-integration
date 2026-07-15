@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+	xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core
+		http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/munit
+		http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools
+		http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+
+	<munit:config name="error-handler-unexpected-test-suite" />
+
+	<flow name="raise-unexpected-error-test-flow">
+		<raise-error type="TEST:UNEXPECTED"
+			description="Unexpected test error." />
+		<error-handler ref="order-sync-global-error-handler" />
+	</flow>
+
+	<munit:test name="global-error-handler-unexpected-test"
+		description="Maps an unexpected error to the stable generic integration error contract.">
+		<munit:execution>
+			<munit:set-event cloneOriginalEvent="false">
+				<munit:payload value="#[{}]" mediaType="application/java" />
+			</munit:set-event>
+
+			<try>
+				<flow-ref name="raise-unexpected-error-test-flow" />
+				<error-handler>
+					<on-error-continue type="TEST:UNEXPECTED"
+						logException="false" />
+				</error-handler>
+			</try>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that expression="#[vars.httpStatus]"
+				is="#[MunitTools::equalTo(500)]"
+				message="The HTTP status must be 500." />
+			<munit-tools:assert-that expression="#[payload.code]"
+				is="#[MunitTools::equalTo('INTEGRATION_ERROR')]"
+				message="The generic integration error code must remain stable." />
+			<munit-tools:assert-that expression="#[payload.message]"
+				is="#[MunitTools::equalTo('An unexpected integration error occurred.')]"
+				message="The generic integration error message must remain stable." />
+			<munit-tools:assert-that expression="#[payload.correlationId]"
+				is="#[MunitTools::equalTo(correlationId)]"
+				message="The error response must propagate the correlation ID." />
+			<munit-tools:assert-that
+				expression="#[vars.outboundHeaders['Content-Type']]"
+				is="#[MunitTools::equalTo('application/json')]"
+				message="The response Content-Type must be application/json." />
+		</munit:validation>
+	</munit:test>
+
+</mule>

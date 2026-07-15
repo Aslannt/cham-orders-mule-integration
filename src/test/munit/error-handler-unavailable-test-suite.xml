@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+	xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core
+		http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/http
+		http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+		http://www.mulesoft.org/schema/mule/munit
+		http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools
+		http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+
+	<munit:config name="error-handler-unavailable-test-suite" />
+
+	<flow name="raise-http-connectivity-error-test-flow">
+		<http:request config-ref="cham-orders-http-request-config"
+			method="GET" path="/orders" />
+		<error-handler ref="order-sync-global-error-handler" />
+	</flow>
+
+	<munit:test name="global-error-handler-unavailable-test"
+		description="Maps an HTTP connectivity failure to the stable downstream unavailable contract.">
+		<munit:behavior>
+			<munit-tools:mock-when processor="http:request">
+				<munit-tools:with-attributes>
+					<munit-tools:with-attribute attributeName="config-ref"
+						whereValue="#[&quot;cham-orders-http-request-config&quot;]" />
+				</munit-tools:with-attributes>
+				<munit-tools:then-return>
+					<munit-tools:error typeId="#[&quot;HTTP:CONNECTIVITY&quot;]" />
+				</munit-tools:then-return>
+			</munit-tools:mock-when>
+		</munit:behavior>
+
+		<munit:execution>
+			<munit:set-event cloneOriginalEvent="false">
+				<munit:payload value="#[{}]" mediaType="application/java" />
+			</munit:set-event>
+
+			<try>
+				<flow-ref name="raise-http-connectivity-error-test-flow" />
+				<error-handler>
+					<on-error-continue type="HTTP:CONNECTIVITY"
+						logException="false" />
+				</error-handler>
+			</try>
+		</munit:execution>
+
+		<munit:validation>
+			<munit-tools:assert-that expression="#[vars.httpStatus]"
+				is="#[MunitTools::equalTo(502)]"
+				message="The HTTP status must be 502." />
+			<munit-tools:assert-that expression="#[payload.code]"
+				is="#[MunitTools::equalTo('CHAM_ORDERS_UNAVAILABLE')]"
+				message="The downstream unavailable code must remain stable." />
+			<munit-tools:assert-that expression="#[payload.message]"
+				is="#[MunitTools::equalTo('Cham Orders API is unavailable.')]"
+				message="The downstream unavailable message must remain stable." />
+			<munit-tools:assert-that expression="#[payload.correlationId]"
+				is="#[MunitTools::equalTo(correlationId)]"
+				message="The error response must propagate the correlation ID." />
+			<munit-tools:assert-that
+				expression="#[vars.outboundHeaders['Content-Type']]"
+				is="#[MunitTools::equalTo('application/json')]"
+				message="The response Content-Type must be application/json." />
+		</munit:validation>
+	</munit:test>
+
+</mule>
